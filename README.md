@@ -24,7 +24,7 @@ hatch run lint
 hatch run fmt
 ```
 
-## Run a full release test.
+## Run a tests for all supported Python versions.
 ```
 hatch run all:test
 ```
