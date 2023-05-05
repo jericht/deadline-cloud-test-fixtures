@@ -8,7 +8,5 @@ jobs:
   Test:
     name: Code Quality
     uses: ./.github/workflows/reuse_python_build.yml
-    with:
-      branch: mainline
     secrets: inherit
 

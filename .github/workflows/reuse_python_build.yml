@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       branch:
-        required: true
+        required: false
         type: string
 
 jobs:
@@ -24,6 +24,10 @@ jobs:
       CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
     steps:
     - uses: actions/checkout@v3
+      if: ${{ !inputs.branch }}
+      
+    - uses: actions/checkout@v3
+      if: ${{ inputs.branch }}
       with:
         ref: ${{ inputs.branch }}
         fetch-depth: 0
