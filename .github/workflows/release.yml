@@ -56,7 +56,7 @@ jobs:
       id-token: write
       contents: read
     env:
-      REGION: "us-west-2"
+      CODEARTIFACT_REGION: "us-west-2"
       CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
       CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
       CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}

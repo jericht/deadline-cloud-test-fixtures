@@ -18,7 +18,7 @@ jobs:
         python-version: ['3.9', '3.10', '3.11']
     env:
       PYTHON: ${{ matrix.python-version }}
-      REGION: "us-west-2"
+      CODEARTIFACT_REGION: "us-west-2"
       CODEARTIFACT_DOMAIN: ${{ secrets.CODEARTIFACT_DOMAIN }}
       CODEARTIFACT_ACCOUNT_ID: ${{ secrets.CODEARTIFACT_ACCOUNT_ID }}
       CODEARTIFACT_REPOSITORY: ${{ secrets.CODEARTIFACT_REPOSITORY }}
