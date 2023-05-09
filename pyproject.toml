@@ -11,6 +11,9 @@ dependencies = [
     "boto3 ~= 1.26",
 ]
 
+[project.entry-points.pytest11]
+bealine_test_scaffolding = "bealine_test_scaffolding.fixtures"
+
 [tool.hatch.build]
 artifacts = [
   "*_version.py",
