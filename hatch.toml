@@ -1,17 +1,10 @@
 [envs.default]
-dependencies = [
-  "coverage[toml] ~= 7.2",
-  "pytest ~= 7.2",
-  "pytest-cov ~= 4.0",
-  "pytest-timeout ~= 2.1",
-  "pytest-xdist ~= 3.1",
-  "black ~= 23.1",
-  "mypy == 0.981",
-  "ruff ~= 0.0.254",
-  "twine ~= 4.0",
+pre-install-commands = [
+  "pip install -r requirements-default.txt"
 ]
 
 [envs.default.scripts]
+sync = "pip install -r requirements-default.txt"
 test = "pytest --cov-config pyproject.toml {args:test}"
 typing = "mypy {args:src test}"
 style = [
