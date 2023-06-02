@@ -1,10 +1,10 @@
 [envs.default]
 pre-install-commands = [
-  "pip install -r requirements-default.txt"
+  "pip install -r requirements-testing.txt"
 ]
 
 [envs.default.scripts]
-sync = "pip install -r requirements-default.txt"
+sync = "pip install -r requirements-testing.txt"
 test = "pytest --cov-config pyproject.toml {args:test}"
 typing = "mypy {args:src test}"
 style = [
