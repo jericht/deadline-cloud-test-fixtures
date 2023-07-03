@@ -32,9 +32,9 @@ class QueueInfo:
     Dataclass used to build list-queues responses
     """
 
-    name: str
+    displayName: str
     queueId: str = "queue-01234567890123456789012345678901"  # pylint: disable=invalid-name
-    state: str = "ACTIVE"
+    status: str = "ACTIVE"
     farmId: str = "farm-01234567890123456789012345678901"  # pylint: disable=invalid-name
 
 

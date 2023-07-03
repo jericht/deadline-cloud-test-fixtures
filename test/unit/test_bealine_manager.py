@@ -257,14 +257,14 @@ class TestBealineManager:
     def test_create_queue(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
         mock_bealine_manager.farm_id = MOCK_FARM_ID
-        mock_bealine_manager.bealine_client.create_queue.return_value = {"queueId": MOCK_QUEUE_ID}
+        mock_bealine_manager.bealine_client.create_queue.return_value = {"queueId": MOCK_QUEUE_ID}  # type: ignore[attr-defined]
 
         # WHEN
         mock_bealine_manager.create_queue(MOCK_QUEUE_NAME)
 
         # THEN
-        mock_bealine_manager.bealine_client.create_queue.assert_called_once_with(
-            name=MOCK_QUEUE_NAME,
+        mock_bealine_manager.bealine_client.create_queue.assert_called_once_with(  # type: ignore[attr-defined]
+            displayName=MOCK_QUEUE_NAME,
             farmId=MOCK_FARM_ID,
         )
 
@@ -272,14 +272,14 @@ class TestBealineManager:
 
     def test_create_queue_no_farm(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        mock_bealine_manager.bealine_client.create_queue.return_value = {"queueId": MOCK_QUEUE_ID}
+        mock_bealine_manager.bealine_client.create_queue.return_value = {"queueId": MOCK_QUEUE_ID}  # type: ignore[attr-defined]
 
         # WHEN
         with pytest.raises(Exception):
             mock_bealine_manager.create_queue(MOCK_QUEUE_NAME)
 
         # THEN
-        assert not mock_bealine_manager.bealine_client.create_queue.called
+        assert not mock_bealine_manager.bealine_client.create_queue.called  # type: ignore[attr-defined]
 
         assert mock_bealine_manager.queue_id is None
 
@@ -323,14 +323,14 @@ class TestBealineManager:
     def test_create_fleet(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
         mock_bealine_manager.farm_id = MOCK_FARM_ID
-        mock_bealine_manager.bealine_client.create_fleet.return_value = {"fleetId": MOCK_FLEET_ID}
+        mock_bealine_manager.bealine_client.create_fleet.return_value = {"fleetId": MOCK_FLEET_ID}  # type: ignore[attr-defined]
 
         # WHEN
         mock_bealine_manager.create_fleet(MOCK_FLEET_NAME)
 
         # THEN
-        mock_bealine_manager.bealine_client.create_fleet.assert_called_once_with(
-            farmId=MOCK_FARM_ID, name=MOCK_FLEET_NAME
+        mock_bealine_manager.bealine_client.create_fleet.assert_called_once_with(  # type: ignore[attr-defined]
+            farmId=MOCK_FARM_ID, displayName=MOCK_FLEET_NAME
         )
 
         assert mock_bealine_manager.fleet_id == MOCK_FLEET_ID
@@ -343,7 +343,7 @@ class TestBealineManager:
         with pytest.raises(Exception):
             mock_bealine_manager.create_fleet(MOCK_FLEET_NAME)
 
-        assert not mock_bealine_manager.bealine_client.create_fleet.called
+        assert not mock_bealine_manager.bealine_client.create_fleet.called  # type: ignore[attr-defined]
         assert mock_bealine_manager.fleet_id is None
 
     def test_delete_fleet(self, mock_bealine_manager: BealineManager) -> None:
@@ -355,9 +355,6 @@ class TestBealineManager:
         mock_bealine_manager.delete_fleet()
 
         # THEN
-        mock_bealine_manager.bealine_client.update_fleet.assert_called_once_with(
-            farmId=MOCK_FARM_ID, fleetId=MOCK_FLEET_ID, state="DISABLED"
-        )
         mock_bealine_manager.bealine_client.delete_fleet.assert_called_once_with(
             farmId=MOCK_FARM_ID, fleetId=MOCK_FLEET_ID
         )

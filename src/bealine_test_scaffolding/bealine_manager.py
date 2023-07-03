@@ -206,11 +206,11 @@ class BealineManager:
 
         try:
             response = self.bealine_client.create_queue(
-                name=queue_name,
+                displayName=queue_name,
                 farmId=self.farm_id,
             )
         except ClientError as e:
-            print(f"Failed to create queue with name = {queue_name}.", file=sys.stderr)
+            print(f"Failed to create queue with displayName = {queue_name}.", file=sys.stderr)
             print(f"The following exception was raised: {e}", file=sys.stderr)
             raise
         else:
@@ -263,9 +263,9 @@ class BealineManager:
             )
 
         try:
-            response = self.bealine_client.create_fleet(farmId=self.farm_id, name=fleet_name)
+            response = self.bealine_client.create_fleet(farmId=self.farm_id, displayName=fleet_name)
         except ClientError as e:
-            print(f"Failed to create fleet with name = {fleet_name}.", file=sys.stderr)
+            print(f"Failed to create fleet with displayName = {fleet_name}.", file=sys.stderr)
             print(f"The following exception was raised: {e}", file=sys.stderr)
             raise
         else:
@@ -282,11 +282,6 @@ class BealineManager:
             raise Exception("ERROR: Attempting to delete a fleet when none was created!")
 
         try:
-            # We need to disable the fleet before deleting it.
-            self.bealine_client.update_fleet(
-                farmId=self.farm_id, fleetId=self.fleet_id, state="DISABLED"
-            )
-
             # Deleting the fleet.
             self.bealine_client.delete_fleet(farmId=self.farm_id, fleetId=self.fleet_id)
         except ClientError as e:
@@ -344,6 +339,18 @@ class BealineClient:
         if "displayName" not in create_farm_input_members and "name" in create_farm_input_members:
             kwargs["name"] = kwargs.pop("displayName")
         return self._real_client.create_farm(*args, **kwargs)
+
+    def create_fleet(self, *args, **kwargs) -> Any:
+        create_fleet_input_members = self._get_bealine_api_input_shape("CreateFleet")
+        if "displayName" not in create_fleet_input_members and "name" in create_fleet_input_members:
+            kwargs["name"] = kwargs.pop("displayName")
+        return self._real_client.create_fleet(*args, **kwargs)
+
+    def create_queue(self, *args, **kwargs) -> Any:
+        create_queue_input_members = self._get_bealine_api_input_shape("CreateQueue")
+        if "displayName" not in create_queue_input_members and "name" in create_queue_input_members:
+            kwargs["name"] = kwargs.pop("displayName")
+        return self._real_client.create_queue(*args, **kwargs)
 
     def _get_bealine_api_input_shape(self, api_name: str) -> dict[str, Any]:
         """
