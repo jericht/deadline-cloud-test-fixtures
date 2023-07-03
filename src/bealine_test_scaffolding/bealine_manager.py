@@ -315,8 +315,8 @@ class BealineManager:
 
     def _get_bealine_client(self, bealine_endpoint: Optional[str]) -> BealineClient:
         """Create a BealineClient shim layer over an actual boto client"""
-        session = boto3.Session()
-        real_bealine_client = session.client(
+        self.session = boto3.Session()
+        real_bealine_client = self.session.client(
             "bealine",
             endpoint_url=bealine_endpoint,
         )
