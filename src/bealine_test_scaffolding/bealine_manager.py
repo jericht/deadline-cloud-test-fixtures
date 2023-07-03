@@ -11,6 +11,8 @@ from typing import Any, Dict, Optional
 import boto3
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
+from botocore.loaders import Loader
+from botocore.model import ServiceModel, OperationModel
 
 
 class BealineManager:
@@ -23,7 +25,7 @@ class BealineManager:
     kms_client: BaseClient
     kms_key_metadata: Optional[Dict[str, Any]]
 
-    bealine_client: BaseClient
+    bealine_client: BealineClient
     farm_id: Optional[str]
     queue_id: Optional[str]
     fleet_id: Optional[str]
@@ -43,11 +45,7 @@ class BealineManager:
         if should_add_bealine_models:
             self.get_bealine_models()
 
-        self.session = boto3.Session()
-        self.bealine_client = self.session.client(
-            "bealine",
-            endpoint_url=self.bealine_endpoint,
-        )
+        self.bealine_client = self._get_bealine_client(self.bealine_endpoint)
 
         # Create the KMS client
         self.kms_client = boto3.client("kms")
@@ -174,7 +172,7 @@ class BealineManager:
 
         try:
             response = self.bealine_client.create_farm(
-                name=farm_name, kmsKeyArn=self.kms_key_metadata["Arn"]
+                displayName=farm_name, kmsKeyArn=self.kms_key_metadata["Arn"]
             )
         except ClientError as e:
             print("Failed to create a farm.", file=sys.stderr)
@@ -319,3 +317,67 @@ class BealineManager:
         # Only deleting the kms key if we have a kms key.
         if hasattr(self, "kms_key_metadata") and self.kms_key_metadata:
             self.delete_kms_key()
+
+    def _get_bealine_client(self, bealine_endpoint: Optional[str]) -> BealineClient:
+        """Create a BealineClient shim layer over an actual boto client"""
+        session = boto3.Session()
+        real_bealine_client = session.client(
+            "bealine",
+            endpoint_url=bealine_endpoint,
+        )
+        return BealineClient(real_bealine_client)
+
+
+class BealineClient:
+    """
+    A shim layer for boto Bealine client. This class will check if a method exists on the real
+    boto3 Bealine client and call it if it exists. If it doesn't exist, an AttributeError will be raised.
+    """
+
+    _real_client: Any
+
+    def __init__(self, real_client: Any) -> None:
+        self._real_client = real_client
+
+    def create_farm(self, *args, **kwargs) -> Any:
+        create_farm_input_members = self._get_bealine_api_input_shape("CreateFarm")
+        if "displayName" not in create_farm_input_members and "name" in create_farm_input_members:
+            kwargs["name"] = kwargs.pop("displayName")
+        return self._real_client.create_farm(*args, **kwargs)
+
+    def _get_bealine_api_input_shape(self, api_name: str) -> dict[str, Any]:
+        """
+        Given a string name of an API e.g. CreateJob, returns the shape of the
+        inputs to that API.
+        """
+        api_model = self._get_bealine_api_model(api_name)
+        if api_model:
+            return api_model.input_shape.members
+        return {}
+
+    def _get_bealine_api_model(self, api_name: str) -> Optional[OperationModel]:
+        """
+        Given a string name of an API e.g. CreateJob, returns the OperationModel
+        for that API from the service model.
+        """
+        loader = Loader()
+        bealine_service_description = loader.load_service_model("bealine", "service-2")
+        bealine_service_model = ServiceModel(bealine_service_description, service_name="bealine")
+        return OperationModel(
+            bealine_service_description["operations"][api_name], bealine_service_model
+        )
+
+    def __getattr__(self, __name: str) -> Any:
+        """
+        Respond to unknown method calls by calling the underlying _real_client
+        If the underlying _real_client does not have a given method, an AttributeError
+        will be raised.
+        Note that __getattr__ is only called if the attribute cannot otherwise be found,
+        so if this class alread has the called method defined, __getattr__ will not be called.
+        This is in opposition to __getattribute__ which is called by default.
+        """
+
+        def method(*args, **kwargs):
+            return getattr(self._real_client, __name)(*args, **kwargs)
+
+        return method

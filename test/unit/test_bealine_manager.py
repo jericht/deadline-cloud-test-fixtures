@@ -11,41 +11,59 @@ from botocore.exceptions import ClientError
 
 from bealine_test_scaffolding import BealineManager
 
+from shared_constants import (
+    MOCK_FARM_ID,
+    MOCK_FARM_NAME,
+    MOCK_FLEET_ID,
+    MOCK_FLEET_NAME,
+    MOCK_QUEUE_ID,
+    MOCK_QUEUE_NAME,
+)
+
 
 class TestBealineManager:
     @pytest.fixture(autouse=True)
     def setup_test(self, mock_get_bealine_models):
         pass
 
+    @pytest.fixture(scope="function")
+    def mock_bealine_manager(self) -> BealineManager:
+        """
+        Returns a BealineManager where any boto3 clients are mocked, including
+        the bealine_client that is part of the BealineManager.
+        """
+        with mock.patch.object(BealineManager, "_get_bealine_client"), mock.patch(
+            "bealine_test_scaffolding.bealine_manager.boto3.client"
+        ):
+            return BealineManager()
+
     ids = [
         pytest.param(None, None, None, None, id="NoKMSKey"),
         pytest.param({"KeyId": "FakeKMSKeyID"}, None, None, None, id="KMSKeyNoFarm"),
-        pytest.param({"KeyId": "FakeKMSKeyID"}, "FakeFarmID", None, None, id="KMSKeyFarmNoFleet"),
+        pytest.param({"KeyId": "FakeKMSKeyID"}, MOCK_FARM_ID, None, None, id="KMSKeyFarmNoFleet"),
         pytest.param(
             {"KeyId": "FakeKMSKeyID"},
-            "FakeFarmID",
-            "FakeFleetID",
+            MOCK_FARM_ID,
+            MOCK_FLEET_ID,
             None,
             id="KMSKeyFarmFleetNoQueue",
         ),
         pytest.param(
             {"KeyId": "FakeKMSKeyID"},
-            "FakeFarmID",
-            "FakeFleetID",
-            "FakeQueueID",
+            MOCK_FARM_ID,
+            MOCK_FLEET_ID,
+            MOCK_QUEUE_ID,
             id="KMSKeyFarmFleetQueue",
         ),
         pytest.param(
             {"KeyId": "FakeKMSKeyID"},
-            "FakeFarmID",
+            MOCK_FARM_ID,
             None,
-            "FakeQueueID",
+            MOCK_QUEUE_ID,
             id="KMSKeyFarmQueueNoFleet",
         ),
     ]
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
     @mock.patch("bealine_test_scaffolding.bealine_manager.sleep")
     @mock.patch.object(BealineManager, "create_fleet")
     @mock.patch.object(BealineManager, "create_queue")
@@ -58,18 +76,15 @@ class TestBealineManager:
         mocked_create_queue: mock.Mock,
         mocked_create_fleet: mock.Mock,
         mocked_sleep: mock.Mock,
-        _: mock.Mock,
-        mocked_boto_session: mock.MagicMock,
+        mock_bealine_manager: BealineManager,
     ) -> None:
         # GIVEN
-        bm = BealineManager()
-        bm.farm_id = "TestFarm"
-        bm.fleet_id = "TestFleet"
-        bm.queue_id = "TestQueue"
-        bm.bealine_client = mock.Mock()
+        mock_bealine_manager.farm_id = MOCK_FARM_ID
+        mock_bealine_manager.fleet_id = MOCK_FLEET_ID
+        mock_bealine_manager.queue_id = MOCK_QUEUE_ID
 
         # WHEN
-        bm.create_scaffolding()
+        mock_bealine_manager.create_scaffolding()
 
         # THEN
         assert mocked_sleep.call_count == 3
@@ -79,12 +94,12 @@ class TestBealineManager:
         mocked_create_queue.assert_called_once()
         mocked_create_fleet.assert_called_once()
 
-        bm.bealine_client.update_queue.assert_called_once_with(
-            farmId=bm.farm_id, queueId=bm.queue_id, fleets=[{"fleetId": bm.fleet_id, "priority": 1}]
+        mock_bealine_manager.bealine_client.update_queue.assert_called_once_with(
+            farmId=mock_bealine_manager.farm_id,
+            queueId=mock_bealine_manager.queue_id,
+            fleets=[{"fleetId": mock_bealine_manager.fleet_id, "priority": 1}],
         )
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
     @mock.patch.object(BealineManager, "delete_fleet")
     @mock.patch.object(BealineManager, "delete_queue")
     @mock.patch.object(BealineManager, "delete_farm")
@@ -96,22 +111,20 @@ class TestBealineManager:
         mocked_delete_farm: mock.Mock,
         mocked_delete_queue: mock.Mock,
         mocked_delete_fleet: mock.Mock,
-        _: mock.Mock,
-        mocked_boto_session: mock.MagicMock,
         kms_key_metadata: dict[str, Any] | None,
         farm_id: str | None,
         fleet_id: str | None,
         queue_id: str | None,
+        mock_bealine_manager: BealineManager,
     ) -> None:
         # GIVEN
-        bm = BealineManager()
-        bm.kms_key_metadata = kms_key_metadata
-        bm.farm_id = farm_id
-        bm.fleet_id = fleet_id
-        bm.queue_id = queue_id
+        mock_bealine_manager.kms_key_metadata = kms_key_metadata
+        mock_bealine_manager.farm_id = farm_id
+        mock_bealine_manager.fleet_id = fleet_id
+        mock_bealine_manager.queue_id = queue_id
 
         # WHEN
-        bm.cleanup_scaffolding()
+        mock_bealine_manager.cleanup_scaffolding()
 
         # THEN
         if kms_key_metadata:
@@ -126,320 +139,250 @@ class TestBealineManager:
         if fleet_id:
             mocked_delete_fleet.assert_called_once()
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_create_kms_key(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_create_kms_key(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        bm = BealineManager()
-
         fake_kms_metadata = {"KeyMetadata": {"KeyId": "Foo"}}
-        bm.kms_client.create_key.return_value = fake_kms_metadata
+        mock_bealine_manager.kms_client.create_key.return_value = fake_kms_metadata
 
         # WHEN
-        bm.create_kms_key()
+        mock_bealine_manager.create_kms_key()
 
         # THEN
-        bm.kms_client.create_key.assert_called_once_with(
+        mock_bealine_manager.kms_client.create_key.assert_called_once_with(
             Description="The KMS used for testing created by the "
             "BealineClientSoftwareTestScaffolding.",
             Tags=[{"TagKey": "Name", "TagValue": "BealineClientSoftwareTestScaffolding"}],
         )
 
-        assert bm.kms_key_metadata == fake_kms_metadata["KeyMetadata"]
+        assert mock_bealine_manager.kms_key_metadata == fake_kms_metadata["KeyMetadata"]
 
-        bm.kms_client.enable_key.assert_called_once_with(
+        mock_bealine_manager.kms_client.enable_key.assert_called_once_with(
             KeyId=fake_kms_metadata["KeyMetadata"]["KeyId"]
         )
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_delete_kms_key(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_delete_kms_key(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
         fake_kms_metadata = {"KeyId": "Foo"}
-        bm = BealineManager()
-        bm.kms_key_metadata = fake_kms_metadata
+        mock_bealine_manager.kms_key_metadata = fake_kms_metadata
 
         # WHEN
-        bm.delete_kms_key()
+        mock_bealine_manager.delete_kms_key()
 
         # THEN
-        bm.kms_client.schedule_key_deletion.assert_called_once_with(
+        mock_bealine_manager.kms_client.schedule_key_deletion.assert_called_once_with(
             KeyId=fake_kms_metadata["KeyId"], PendingWindowInDays=7
         )
 
-        assert bm.kms_key_metadata is None
+        assert mock_bealine_manager.kms_key_metadata is None
 
     key_metadatas = [
         pytest.param(None, id="NoMetadata"),
         pytest.param({"Foo": "Bar"}, id="NoKeyInMetadata"),
     ]
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
     @pytest.mark.parametrize("key_metadatas", key_metadatas)
     def test_delete_kms_key_no_key(
         self,
-        _: mock.Mock,
-        mocked_boto_session: mock.MagicMock,
         key_metadatas: dict[str, Any] | None,
+        mock_bealine_manager: BealineManager,
     ) -> None:
         # GIVEN
-        bm = BealineManager()
-        bm.kms_key_metadata = key_metadatas
+        mock_bealine_manager.kms_key_metadata = key_metadatas
 
         # WHEN / THEN
         with pytest.raises(Exception):
-            bm.delete_kms_key()
+            mock_bealine_manager.delete_kms_key()
 
-        assert not bm.kms_client.schedule_key_deletion.called
+        assert not mock_bealine_manager.kms_client.schedule_key_deletion.called
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_create_farm(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_create_farm(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        fake_farm_name = "test_farm"
         fake_kms_metadata = {"Arn": "fake_kms_arn"}
-        fake_farm_id = "fake_farm_id"
 
-        bm = BealineManager()
-        bm.kms_key_metadata = fake_kms_metadata
-        bm.bealine_client.create_farm.return_value = {"farmId": fake_farm_id}
+        mock_bealine_manager.kms_key_metadata = fake_kms_metadata
+        mock_bealine_manager.bealine_client.create_farm.return_value = {"farmId": MOCK_FARM_ID}  # type: ignore[attr-defined]
 
         # WHEN
-        bm.create_farm(fake_farm_name)
+        mock_bealine_manager.create_farm(MOCK_FARM_NAME)
 
         # THEN
-        bm.bealine_client.create_farm.assert_called_once_with(
-            name=fake_farm_name, kmsKeyArn=fake_kms_metadata["Arn"]
+        mock_bealine_manager.bealine_client.create_farm.assert_called_once_with(  # type: ignore[attr-defined] # noqa
+            displayName=MOCK_FARM_NAME, kmsKeyArn=fake_kms_metadata["Arn"]
         )
-        assert bm.farm_id == fake_farm_id
+        assert mock_bealine_manager.farm_id == MOCK_FARM_ID
 
     key_metadatas = [
         pytest.param(None, id="NoMetadata"),
         pytest.param({"Foo": "Bar"}, id="NoKeyInMetadata"),
     ]
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
     @pytest.mark.parametrize("key_metadatas", key_metadatas)
     def test_create_farm_kms_not_valid(
         self,
-        _: mock.Mock,
-        mocked_boto_session: mock.MagicMock,
         key_metadatas: dict[str, Any] | None,
+        mock_bealine_manager: BealineManager,
     ) -> None:
         # GIVEN
-        fake_farm_name = "test_farm"
-        bm = BealineManager()
-        bm.kms_key_metadata = key_metadatas
+        mock_bealine_manager.kms_key_metadata = key_metadatas
 
         # WHEN / THEN
         with pytest.raises(Exception):
-            bm.create_farm(fake_farm_name)
+            mock_bealine_manager.create_farm(MOCK_FARM_NAME)
 
-        assert not bm.bealine_client.create_farm.called
-        assert bm.farm_id is None
+        assert not mock_bealine_manager.bealine_client.create_farm.called  # type: ignore[attr-defined] # noqa
+        assert mock_bealine_manager.farm_id is None
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_delete_farm(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_delete_farm(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        fake_farm_id = "fake_farm_id"
-        bm = BealineManager()
-        bm.farm_id = fake_farm_id
+        mock_bealine_manager.farm_id = MOCK_FARM_ID
 
         # WHEN
-        bm.delete_farm()
+        mock_bealine_manager.delete_farm()
 
         # THEN
-        bm.bealine_client.delete_farm.assert_called_once_with(farmId=fake_farm_id)
+        mock_bealine_manager.bealine_client.delete_farm.assert_called_once_with(farmId=MOCK_FARM_ID)
 
-        assert bm.farm_id is None
+        assert mock_bealine_manager.farm_id is None
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_delete_farm_not_created(
-        self, _: mock.Mock, mocked_boto_session: mock.MagicMock
-    ) -> None:
+    def test_delete_farm_not_created(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        bm = BealineManager()
-
+        # mock_bealine_manager fixture
         # WHEN / THEN
         with pytest.raises(Exception):
-            bm.delete_farm()
+            mock_bealine_manager.delete_farm()
 
         # THEN
-        assert not bm.bealine_client.delete_farm.called
+        assert not mock_bealine_manager.bealine_client.delete_farm.called
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_create_queue(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_create_queue(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        fake_farm_id = "fake_farm_id"
-        fake_queue_name = "fake_queue_name"
-        fake_queue_id = "fake_queue_id"
-        bm = BealineManager()
-        bm.farm_id = fake_farm_id
-        bm.bealine_client.create_queue.return_value = {"queueId": fake_queue_id}
+        mock_bealine_manager.farm_id = MOCK_FARM_ID
+        mock_bealine_manager.bealine_client.create_queue.return_value = {"queueId": MOCK_QUEUE_ID}
 
         # WHEN
-        bm.create_queue(fake_queue_name)
+        mock_bealine_manager.create_queue(MOCK_QUEUE_NAME)
 
         # THEN
-        bm.bealine_client.create_queue.assert_called_once_with(
-            name=fake_queue_name,
-            farmId=fake_farm_id,
+        mock_bealine_manager.bealine_client.create_queue.assert_called_once_with(
+            name=MOCK_QUEUE_NAME,
+            farmId=MOCK_FARM_ID,
         )
 
-        assert bm.queue_id == fake_queue_id
+        assert mock_bealine_manager.queue_id == MOCK_QUEUE_ID
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_create_queue_no_farm(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_create_queue_no_farm(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        fake_queue_name = "fake_queue_name"
-        fake_queue_id = "fake_queue_id"
-        bm = BealineManager()
-        bm.bealine_client.create_queue.return_value = {"queueId": fake_queue_id}
+        mock_bealine_manager.bealine_client.create_queue.return_value = {"queueId": MOCK_QUEUE_ID}
 
         # WHEN
         with pytest.raises(Exception):
-            bm.create_queue(fake_queue_name)
+            mock_bealine_manager.create_queue(MOCK_QUEUE_NAME)
 
         # THEN
-        assert not bm.bealine_client.create_queue.called
+        assert not mock_bealine_manager.bealine_client.create_queue.called
 
-        assert bm.queue_id is None
+        assert mock_bealine_manager.queue_id is None
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_delete_queue(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_delete_queue(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        fake_queue_id = "fake_queue_id"
-        fake_farm_id = "fake_farm_id"
-
-        bm = BealineManager()
-        bm.queue_id = fake_queue_id
-        bm.farm_id = fake_farm_id
+        mock_bealine_manager.queue_id = MOCK_QUEUE_ID
+        mock_bealine_manager.farm_id = MOCK_FARM_ID
 
         # WHEN
-        bm.delete_queue()
+        mock_bealine_manager.delete_queue()
 
         # THEN
-        bm.bealine_client.delete_queue.assert_called_once_with(
-            queueId=fake_queue_id, farmId=fake_farm_id
+        mock_bealine_manager.bealine_client.delete_queue.assert_called_once_with(
+            queueId=MOCK_QUEUE_ID, farmId=MOCK_FARM_ID
         )
 
-        assert bm.queue_id is None
+        assert mock_bealine_manager.queue_id is None
 
     farm_queue_ids = [
-        pytest.param("fake_queue_id", None, id="NoFarmId"),
-        pytest.param(None, "fake_farm_id", id="NoQueueId"),
+        pytest.param(MOCK_QUEUE_ID, None, id="NoFarmId"),
+        pytest.param(None, MOCK_FARM_ID, id="NoQueueId"),
     ]
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
     @pytest.mark.parametrize("fake_queue_id, fake_farm_id", farm_queue_ids)
     def test_delete_queue_no_farm_queue(
         self,
-        _: mock.Mock,
-        mocked_boto_session: mock.MagicMock,
         fake_queue_id: str | None,
         fake_farm_id: str | None,
+        mock_bealine_manager: BealineManager,
     ) -> None:
         # GIVEN
-        bm = BealineManager()
-        bm.queue_id = fake_queue_id
-        bm.farm_id = fake_farm_id
+        mock_bealine_manager.queue_id = fake_queue_id
+        mock_bealine_manager.farm_id = fake_farm_id
 
         # WHEN / THEN
         with pytest.raises(Exception):
-            bm.delete_queue()
+            mock_bealine_manager.delete_queue()
 
-        assert not bm.bealine_client.delete_queue.called
+        assert not mock_bealine_manager.bealine_client.delete_queue.called
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_create_fleet(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_create_fleet(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        fake_fleet_name = "fake_fleet_name"
-        fake_farm_id = "fake_farm_id"
-        fake_fleet_id = "fake_fleet_id"
-        bm = BealineManager()
-        bm.farm_id = fake_farm_id
-        bm.bealine_client.create_fleet.return_value = {"fleetId": fake_fleet_id}
+        mock_bealine_manager.farm_id = MOCK_FARM_ID
+        mock_bealine_manager.bealine_client.create_fleet.return_value = {"fleetId": MOCK_FLEET_ID}
 
         # WHEN
-        bm.create_fleet(fake_fleet_name)
+        mock_bealine_manager.create_fleet(MOCK_FLEET_NAME)
 
         # THEN
-        bm.bealine_client.create_fleet.assert_called_once_with(
-            farmId=fake_farm_id, name=fake_fleet_name
+        mock_bealine_manager.bealine_client.create_fleet.assert_called_once_with(
+            farmId=MOCK_FARM_ID, name=MOCK_FLEET_NAME
         )
 
-        assert bm.fleet_id == fake_fleet_id
+        assert mock_bealine_manager.fleet_id == MOCK_FLEET_ID
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_create_fleet_no_farm(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_create_fleet_no_farm(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        fake_fleet_name = "fake_fleet_name"
-        bm = BealineManager()
+        # mock_bealine_manager fixture
 
         # WHEN / THEN
         with pytest.raises(Exception):
-            bm.create_fleet(fake_fleet_name)
+            mock_bealine_manager.create_fleet(MOCK_FLEET_NAME)
 
-        assert not bm.bealine_client.create_fleet.called
-        assert bm.fleet_id is None
+        assert not mock_bealine_manager.bealine_client.create_fleet.called
+        assert mock_bealine_manager.fleet_id is None
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
-    def test_delete_fleet(self, _: mock.Mock, mocked_boto_session: mock.MagicMock) -> None:
+    def test_delete_fleet(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
-        fake_farm_id = "fake_farm_id"
-        fake_fleet_id = "fake_fleet_id"
-
-        bm = BealineManager()
-        bm.farm_id = fake_farm_id
-        bm.fleet_id = fake_fleet_id
+        mock_bealine_manager.farm_id = MOCK_FARM_ID
+        mock_bealine_manager.fleet_id = MOCK_FLEET_ID
 
         # WHEN
-        bm.delete_fleet()
+        mock_bealine_manager.delete_fleet()
 
         # THEN
-        bm.bealine_client.update_fleet.assert_called_once_with(
-            farmId=fake_farm_id, fleetId=fake_fleet_id, state="DISABLED"
+        mock_bealine_manager.bealine_client.update_fleet.assert_called_once_with(
+            farmId=MOCK_FARM_ID, fleetId=MOCK_FLEET_ID, state="DISABLED"
         )
-        bm.bealine_client.delete_fleet.assert_called_once_with(
-            farmId=fake_farm_id, fleetId=fake_fleet_id
+        mock_bealine_manager.bealine_client.delete_fleet.assert_called_once_with(
+            farmId=MOCK_FARM_ID, fleetId=MOCK_FLEET_ID
         )
 
-        assert bm.fleet_id is None
+        assert mock_bealine_manager.fleet_id is None
 
     farm_queue_ids = [
-        pytest.param("fake_farm_id", None, id="NoFleetId"),
-        pytest.param(None, "fake_fleet_id", id="NoFarmId"),
+        pytest.param(MOCK_FARM_ID, None, id="NoFleetId"),
+        pytest.param(None, MOCK_FLEET_ID, id="NoFarmId"),
     ]
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.Session")
-    @mock.patch("bealine_test_scaffolding.bealine_manager.boto3.client")
     @pytest.mark.parametrize("fake_farm_id, fake_fleet_id", farm_queue_ids)
     def test_delete_fleet_no_farm_fleet(
         self,
-        _: mock.Mock,
-        mocked_boto_session: mock.MagicMock,
         fake_farm_id: str | None,
         fake_fleet_id: str | None,
+        mock_bealine_manager: BealineManager,
     ) -> None:
         # GIVEN
-        bm = BealineManager()
-        bm.farm_id = fake_farm_id
-        bm.fleet_id = fake_fleet_id
+        mock_bealine_manager.farm_id = fake_farm_id
+        mock_bealine_manager.fleet_id = fake_fleet_id
 
         # WHEN / THEN
         with pytest.raises(Exception):
-            bm.delete_fleet()
+            mock_bealine_manager.delete_fleet()
 
     farm_queue_ids = [
         pytest.param(

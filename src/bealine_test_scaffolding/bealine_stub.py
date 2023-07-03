@@ -21,9 +21,9 @@ class FarmInfo:
     Dataclass used to build list-farm responses
     """
 
-    name: str
+    displayName: str
     farmId: str = "farm-01234567890123456789012345678901"  # pylint: disable=invalid-name
-    state: str = "ACTIVE"
+    status: str = "ACTIVE"
 
 
 @dataclass
