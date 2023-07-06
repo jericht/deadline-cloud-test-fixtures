@@ -5,14 +5,22 @@ import os
 import posixpath
 import sys
 import tempfile
+import uuid
 from time import sleep
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import boto3
 from botocore.client import BaseClient
 from botocore.exceptions import ClientError
 from botocore.loaders import Loader
 from botocore.model import ServiceModel, OperationModel
+
+from .constants import (
+    JOB_ATTACHMENTS_ROOT_PREFIX,
+    JOB_ATTACHMENTS_CAS_PREFIX,
+    JOB_ATTACHMENTS_OUTPUT_PREFIX,
+    DEFAULT_CMF_CONFIG,
+)
 
 
 class BealineManager:
@@ -29,6 +37,7 @@ class BealineManager:
     farm_id: Optional[str]
     queue_id: Optional[str]
     fleet_id: Optional[str]
+    job_attachment_bucket: Optional[str]
     additional_queues: list[dict[str, Any]]
     bealine_model_dir: Optional[tempfile.TemporaryDirectory] = None
 
@@ -87,33 +96,18 @@ class BealineManager:
 
     def create_scaffolding(
         self,
-        farm_name: str = "test_farm",
-        queue_name: str = "test_queue",
-        fleet_name: str = "test_fleet",
+        worker_role_arn: str,
+        job_attachments_bucket: str,
+        farm_name: str = uuid.uuid4().hex,
+        queue_name: str = uuid.uuid4().hex,
+        fleet_name: str = uuid.uuid4().hex,
     ) -> None:
         self.create_kms_key()
         self.create_farm(farm_name)
-
-        # TODO: Remove sleep once we have proper queuing of commands
-        # to the scheduler (currently there is a race condition between
-        # CreateFarm and CreateQueue)
-        sleep(120)
-
         self.create_queue(queue_name)
-
-        # TODO: Remove sleep once we have proper queuing of commands
-        # to the scheduler (currently there is a race condition between
-        # CreateQueue and CreateJob)
-        sleep(15)
-
-        self.create_fleet(fleet_name)
-        sleep(15)
-
-        self.bealine_client.update_queue(
-            farmId=self.farm_id,
-            queueId=self.queue_id,
-            fleets=[{"fleetId": self.fleet_id, "priority": 1}],
-        )
+        self.add_job_attachments_bucket(job_attachments_bucket)
+        self.create_fleet(fleet_name, worker_role_arn)
+        self.queue_fleet_association()
 
     def create_kms_key(self) -> None:
         try:
@@ -196,9 +190,8 @@ class BealineManager:
             print(f"Successfully deleted farm with id = {self.farm_id}")
             self.farm_id = None
 
-    def create_queue(
-        self, queue_name: str, log_bucket_name: str = "BealineClientSoftwareTestScaffolding"
-    ) -> None:
+    # TODO: Add support for queue users with jobsRunAs
+    def create_queue(self, queue_name: str) -> None:
         if not hasattr(self, "farm_id") or self.farm_id is None:
             raise Exception(
                 "ERROR: Attempting to create a queue without having had created a farm!"
@@ -216,6 +209,19 @@ class BealineManager:
         else:
             self.queue_id = response["queueId"]
             print(f"Successfully created queue with id = {self.queue_id}")
+
+    def add_job_attachments_bucket(self, job_attachments_bucket: str):
+        """Add a job attachments bucket to the queue"""
+        self.bealine_client.update_queue(
+            queueId=self.queue_id,
+            farmId=self.farm_id,
+            jobAttachmentSettings={
+                "s3BucketName": job_attachments_bucket,
+                "rootPrefix": JOB_ATTACHMENTS_ROOT_PREFIX,
+                "contentAddressedPrefix": JOB_ATTACHMENTS_CAS_PREFIX,
+                "outputPrefix": JOB_ATTACHMENTS_OUTPUT_PREFIX,
+            },
+        )
 
     def create_additional_queue(self, **kwargs) -> Dict[str, Any]:
         """Create and add another queue to the bealine manager"""
@@ -256,21 +262,109 @@ class BealineManager:
                 print(f"delete queue exception {str(e)}")
                 continue
 
-    def create_fleet(self, fleet_name: str) -> None:
+    def create_fleet(self, fleet_name: str, worker_role_arn: str) -> None:
         if not hasattr(self, "farm_id") or not self.farm_id:
             raise Exception(
                 "ERROR: Attempting to create a fleet without having had created a farm!"
             )
-
         try:
-            response = self.bealine_client.create_fleet(farmId=self.farm_id, displayName=fleet_name)
+            response = self.bealine_client.create_fleet(
+                farmId=self.farm_id,
+                displayName=fleet_name,
+                workerRoleArn=worker_role_arn,
+                configuration=DEFAULT_CMF_CONFIG,
+            )
         except ClientError as e:
             print(f"Failed to create fleet with displayName = {fleet_name}.", file=sys.stderr)
             print(f"The following exception was raised: {e}", file=sys.stderr)
             raise
         else:
             self.fleet_id = response["fleetId"]
+            self.wait_for_desired_fleet_status(
+                desired_status="ACTIVE", allowed_status=["ACTIVE", "CREATE_IN_PROGRESS"]
+            )
             print(f"Successfully created a fleet with id = {self.fleet_id}")
+
+    # Temporary until we have waiters
+    def wait_for_desired_fleet_status(self, desired_status: str, allowed_status: List[str]) -> None:
+        max_retries = 10
+        fleet_status = None
+        retry_count = 0
+        while fleet_status != desired_status and retry_count < max_retries:
+            response = self.bealine_client.get_fleet(fleetId=self.fleet_id, farmId=self.farm_id)
+
+            fleet_status = response["status"]
+
+            if fleet_status not in allowed_status:
+                raise ValueError(
+                    f"fleet entered a nonvalid status ({fleet_status}) while "
+                    f"waiting for the desired status: {desired_status}."
+                )
+
+            if fleet_status == desired_status:
+                return response
+
+            print(f"Fleet status: {fleet_status}\nChecking again...")
+            retry_count += 1
+            sleep(10)
+
+        raise ValueError(
+            f"Timed out waiting for fleet status to reach the desired status {desired_status}."
+        )
+
+    def queue_fleet_association(self) -> None:
+        if not hasattr(self, "farm_id") or not self.farm_id:
+            raise Exception("ERROR: Attempting to queue a fleet without having had created a farm!")
+
+        if not hasattr(self, "queue_id") or not self.queue_id:
+            raise Exception("ERROR: Attempting to queue a fleet without creating a queue")
+
+        if not hasattr(self, "fleet_id") or not self.fleet_id:
+            raise Exception("ERROR: Attempting to queue a fleet without having had created one!")
+
+        try:
+            self.bealine_client.create_queue_fleet_association(
+                farmId=self.farm_id, queueId=self.queue_id, fleetId=self.fleet_id
+            )
+        except ClientError as e:
+            print(f"Failed to associate fleet with id = {self.fleet_id}.", file=sys.stderr)
+            print(f"The following exception was raised: {e}", file=sys.stderr)
+            raise
+        else:
+            print(f"Successfully queued fleet with id = {self.fleet_id}")
+
+    # Temporary until we have waiters
+    def stop_queue_fleet_associations_and_wait(self) -> None:
+        self.bealine_client.update_queue_fleet_association(
+            farmId=self.farm_id,
+            queueId=self.queue_id,
+            fleetId=self.fleet_id,
+            status="CANCEL_WORK",
+        )
+        max_retries = 10
+        retry_count = 0
+        qfa_status = None
+        allowed_status = ["STOPPED", "CANCEL_WORK"]
+        while qfa_status != "STOPPED" and retry_count < max_retries:
+            response = self.bealine_client.get_queue_fleet_association(
+                farmId=self.farm_id, queueId=self.queue_id, fleetId=self.fleet_id
+            )
+
+            qfa_status = response["status"]
+
+            if qfa_status not in allowed_status:
+                raise ValueError(
+                    f"Association entered a nonvalid status ({qfa_status}) while "
+                    f"waiting for the desired status: STOPPED"
+                )
+
+            if qfa_status == "STOPPED":
+                return response
+
+            print(f"Queue Fleet Association: {qfa_status}\nChecking again...")
+            retry_count += 1
+            sleep(10)
+        raise ValueError("Timed out waiting for association to reach a STOPPED status.")
 
     def delete_fleet(self) -> None:
         if not hasattr(self, "farm_id") or not self.farm_id:
@@ -282,6 +376,11 @@ class BealineManager:
             raise Exception("ERROR: Attempting to delete a fleet when none was created!")
 
         try:
+            # Delete queue fleet association.
+            self.stop_queue_fleet_associations_and_wait()
+            self.bealine_client.delete_queue_fleet_association(
+                farmId=self.farm_id, queueId=self.queue_id, fleetId=self.fleet_id
+            )
             # Deleting the fleet.
             self.bealine_client.delete_fleet(farmId=self.farm_id, fleetId=self.fleet_id)
         except ClientError as e:
@@ -291,23 +390,23 @@ class BealineManager:
             print(f"The following exception was raised: {e}", file=sys.stderr)
             raise
         else:
+            self.wait_for_desired_fleet_status(
+                desired_status="DELETED", allowed_status=["DELETED", "DELETE_IN_PROGRESS"]
+            )
             print(f"Successfully deleted fleet with id = {self.fleet_id}")
             self.fleet_id = None
 
     def cleanup_scaffolding(self) -> None:
-        # If we have a farm, then we want to delete fleet, queue and farm.
-        self.delete_additional_queues()
+        # Only deleting the fleet if we have a fleet.
+        if hasattr(self, "fleet_id") and self.fleet_id:
+            self.delete_fleet()
 
         if hasattr(self, "farm_id") and self.farm_id:
             # Only deleting the queue if we have a queue.
             if hasattr(self, "queue_id") and self.queue_id:
                 self.delete_queue()
 
-            # Only deleting the fleet if we have a fleet.
-            if hasattr(self, "fleet_id") and self.fleet_id:
-                self.delete_fleet()
-
-            self.delete_farm()
+        self.delete_farm()
 
         # Only deleting the kms key if we have a kms key.
         if hasattr(self, "kms_key_metadata") and self.kms_key_metadata:
@@ -320,6 +419,7 @@ class BealineManager:
             "bealine",
             endpoint_url=bealine_endpoint,
         )
+
         return BealineClient(real_bealine_client)
 
 
@@ -346,11 +446,74 @@ class BealineClient:
             kwargs["name"] = kwargs.pop("displayName")
         return self._real_client.create_fleet(*args, **kwargs)
 
+    def get_fleet(self, *args, **kwargs) -> Any:
+        response = self._real_client.get_fleet(*args, **kwargs)
+        if "name" in response and "displayName" not in response:
+            response["displayName"] = response["name"]
+            del response["name"]
+        if "state" in response and "status" not in response:
+            response["status"] = response["state"]
+            del response["state"]
+        if "type" in response:
+            del response["type"]
+        return response
+
+    def get_queue_fleet_association(self, *args, **kwargs) -> Any:
+        response = self._real_client.get_queue_fleet_association(*args, **kwargs)
+        if "state" in response and "status" not in response:
+            response["status"] = response["state"]
+            del response["state"]
+        return response
+
     def create_queue(self, *args, **kwargs) -> Any:
         create_queue_input_members = self._get_bealine_api_input_shape("CreateQueue")
         if "displayName" not in create_queue_input_members and "name" in create_queue_input_members:
             kwargs["name"] = kwargs.pop("displayName")
         return self._real_client.create_queue(*args, **kwargs)
+
+    def create_queue_fleet_association(self, *args, **kwargs) -> Any:
+        create_queue_fleet_association_method_name: Optional[str]
+        create_queue_fleet_association_method: Optional[str]
+
+        for create_queue_fleet_association_method_name in (
+            "put_queue_fleet_association",
+            "create_queue_fleet_association",
+        ):
+            create_queue_fleet_association_method = getattr(
+                self._real_client, create_queue_fleet_association_method_name, None
+            )
+            if create_queue_fleet_association_method:
+                break
+            else:
+                create_queue_fleet_association_method = None
+
+        # mypy complains about they kwargs type
+        return create_queue_fleet_association_method(*args, **kwargs)  # type: ignore
+
+    def update_queue_fleet_association(self, *args, **kwargs) -> Any:
+        update_queue_fleet_association_method_name: Optional[str]
+        update_queue_fleet_association_method: Optional[str]
+
+        for update_queue_fleet_association_method_name in (
+            "update_queue_fleet_association",
+            "update_queue_fleet_association_state",
+        ):
+            update_queue_fleet_association_method = getattr(
+                self._real_client, update_queue_fleet_association_method_name, None
+            )
+            if update_queue_fleet_association_method:
+                break
+            else:
+                update_queue_fleet_association_method = None
+
+        if update_queue_fleet_association_method_name == "update_queue_fleet_association":
+            # mypy complains about they kwargs type
+            return update_queue_fleet_association_method(*args, **kwargs)  # type: ignore
+
+        if update_queue_fleet_association_method_name == "update_queue_fleet_association_state":
+            kwargs["state"] = kwargs.pop("status")
+            # mypy complains about they kwargs type
+            return update_queue_fleet_association_method(*args, **kwargs)  # type: ignore
 
     def _get_bealine_api_input_shape(self, api_name: str) -> dict[str, Any]:
         """
@@ -367,7 +530,8 @@ class BealineClient:
         Given a string name of an API e.g. CreateJob, returns the OperationModel
         for that API from the service model.
         """
-        loader = Loader()
+        data_model_path = os.getenv("AWS_DATA_PATH")
+        loader = Loader(extra_search_paths=[data_model_path] if data_model_path is not None else [])
         bealine_service_description = loader.load_service_model("bealine", "service-2")
         bealine_service_model = ServiceModel(bealine_service_description, service_name="bealine")
         return OperationModel(

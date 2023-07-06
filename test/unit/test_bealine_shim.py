@@ -131,3 +131,52 @@ class TestBealineShim:
             input_shape_mock.return_value = {name_in_model: MOCK_QUEUE_NAME}
             bealine_client.create_queue(**kwargs_input)
         fake_client.create_queue.assert_called_once_with(**kwargs_output)
+
+    def test_get_fleet_name_state_to_displayname_status_remove_type(self) -> None:
+        """
+        get_fleet will be updated such that "name" will be replaced with "displayName"
+        and "state" will be replaced with "status". "type" will be removed.
+        Here we make sure that the shim is doing it's job of:
+        1. Calling the underlying client method
+        2. Replacing the appropriate keys
+        """
+        fake_client = MagicMock()
+        fake_client.get_fleet.return_value = {
+            "name": "fleet1",
+            "state": "ACTIVE",
+            "type": "CUSTOMER_MANAGER",
+        }
+        bealine_client = BealineClient(fake_client)
+        response = bealine_client.get_fleet("fleetid-somefleet")
+
+        assert "name" not in response
+        assert "displayName" in response
+        assert "state" not in response
+        assert "status" in response
+        assert "type" not in response
+        assert response["displayName"] == "fleet1"
+        assert response["status"] == "ACTIVE"
+        fake_client.get_fleet.assert_called_once_with("fleetid-somefleet")
+
+    def test_get_queue_fleet_association_state_to_status(self) -> None:
+        """
+        get_queue_fleet_association will be updated such that  "state" will be replaced with "status".
+        Here we make sure that the shim is doing it's job of:
+        1. Calling the underlying client method
+        2. Replacing the appropriate keys
+        """
+        fake_client = MagicMock()
+        fake_client.get_queue_fleet_association.return_value = {
+            "state": "STOPPED",
+        }
+        bealine_client = BealineClient(fake_client)
+        response = bealine_client.get_queue_fleet_association(
+            "fake-farm-id", "fake-queue-id", "fake-fleet-id"
+        )
+
+        assert "state" not in response
+        assert "status" in response
+        assert response["status"] == "STOPPED"
+        fake_client.get_queue_fleet_association.assert_called_once_with(
+            "fake-farm-id", "fake-queue-id", "fake-fleet-id"
+        )

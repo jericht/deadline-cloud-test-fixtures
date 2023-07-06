@@ -18,6 +18,7 @@ from shared_constants import (
     MOCK_FLEET_NAME,
     MOCK_QUEUE_ID,
     MOCK_QUEUE_NAME,
+    MOCK_DEFAULT_CMF_CONFIG,
 )
 
 
@@ -64,41 +65,38 @@ class TestBealineManager:
         ),
     ]
 
-    @mock.patch("bealine_test_scaffolding.bealine_manager.sleep")
     @mock.patch.object(BealineManager, "create_fleet")
     @mock.patch.object(BealineManager, "create_queue")
     @mock.patch.object(BealineManager, "create_farm")
     @mock.patch.object(BealineManager, "create_kms_key")
+    @mock.patch.object(BealineManager, "add_job_attachments_bucket")
+    @mock.patch.object(BealineManager, "queue_fleet_association")
     def test_create_scaffolding(
         self,
         mocked_create_kms_key: mock.Mock,
         mocked_create_farm: mock.Mock,
         mocked_create_queue: mock.Mock,
         mocked_create_fleet: mock.Mock,
-        mocked_sleep: mock.Mock,
+        mocked_queue_fleet_association: mock.Mock,
+        mocked_add_job_attachments_bucket: mock.Mock,
         mock_bealine_manager: BealineManager,
     ) -> None:
         # GIVEN
         mock_bealine_manager.farm_id = MOCK_FARM_ID
         mock_bealine_manager.fleet_id = MOCK_FLEET_ID
         mock_bealine_manager.queue_id = MOCK_QUEUE_ID
+        worker_role_arn = "fake_worker_role"
+        job_attachments_bucket = "fake_job_attachments_bucket"
 
         # WHEN
-        mock_bealine_manager.create_scaffolding()
-
-        # THEN
-        assert mocked_sleep.call_count == 3
+        mock_bealine_manager.create_scaffolding(worker_role_arn, job_attachments_bucket)
 
         mocked_create_kms_key.assert_called_once()
         mocked_create_farm.assert_called_once()
         mocked_create_queue.assert_called_once()
+        mocked_add_job_attachments_bucket.assert_called_once()
         mocked_create_fleet.assert_called_once()
-
-        mock_bealine_manager.bealine_client.update_queue.assert_called_once_with(
-            farmId=mock_bealine_manager.farm_id,
-            queueId=mock_bealine_manager.queue_id,
-            fleets=[{"fleetId": mock_bealine_manager.fleet_id, "priority": 1}],
-        )
+        mocked_queue_fleet_association.assert_called_once()
 
     @mock.patch.object(BealineManager, "delete_fleet")
     @mock.patch.object(BealineManager, "delete_queue")
@@ -126,18 +124,18 @@ class TestBealineManager:
         # WHEN
         mock_bealine_manager.cleanup_scaffolding()
 
-        # THEN
-        if kms_key_metadata:
-            mocked_delete_kms_key.assert_called_once()
-
-        if farm_id:
-            mocked_delete_farm.assert_called_once()
+        # c
+        if fleet_id:
+            mocked_delete_fleet.assert_called_once()
 
         if queue_id:
             mocked_delete_queue.assert_called_once()
 
-        if fleet_id:
-            mocked_delete_fleet.assert_called_once()
+        if farm_id:
+            mocked_delete_farm.assert_called_once()
+
+        if kms_key_metadata:
+            mocked_delete_kms_key.assert_called_once()
 
     def test_create_kms_key(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
@@ -323,14 +321,19 @@ class TestBealineManager:
     def test_create_fleet(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
         mock_bealine_manager.farm_id = MOCK_FARM_ID
+        fake_worker_role_arn = "fake_worker_role_arn"
         mock_bealine_manager.bealine_client.create_fleet.return_value = {"fleetId": MOCK_FLEET_ID}  # type: ignore[attr-defined]
+        mock_bealine_manager.bealine_client.get_fleet.return_value = {"status": "ACTIVE"}  # type: ignore[attr-defined]
 
         # WHEN
-        mock_bealine_manager.create_fleet(MOCK_FLEET_NAME)
+        mock_bealine_manager.create_fleet(MOCK_FLEET_NAME, fake_worker_role_arn)
 
         # THEN
         mock_bealine_manager.bealine_client.create_fleet.assert_called_once_with(  # type: ignore[attr-defined]
-            farmId=MOCK_FARM_ID, displayName=MOCK_FLEET_NAME
+            farmId=MOCK_FARM_ID,
+            displayName=MOCK_FLEET_NAME,
+            workerRoleArn=fake_worker_role_arn,
+            configuration=MOCK_DEFAULT_CMF_CONFIG,
         )
 
         assert mock_bealine_manager.fleet_id == MOCK_FLEET_ID
@@ -338,10 +341,11 @@ class TestBealineManager:
     def test_create_fleet_no_farm(self, mock_bealine_manager: BealineManager) -> None:
         # GIVEN
         # mock_bealine_manager fixture
+        worker_role_arn = "fake_worker_role_arn"
 
         # WHEN / THEN
         with pytest.raises(Exception):
-            mock_bealine_manager.create_fleet(MOCK_FLEET_NAME)
+            mock_bealine_manager.create_fleet(MOCK_FLEET_NAME, worker_role_arn)
 
         assert not mock_bealine_manager.bealine_client.create_fleet.called  # type: ignore[attr-defined]
         assert mock_bealine_manager.fleet_id is None
@@ -350,6 +354,8 @@ class TestBealineManager:
         # GIVEN
         mock_bealine_manager.farm_id = MOCK_FARM_ID
         mock_bealine_manager.fleet_id = MOCK_FLEET_ID
+        mock_bealine_manager.bealine_client.get_queue_fleet_association.return_value = {"status": "STOPPED"}  # type: ignore[attr-defined]
+        mock_bealine_manager.bealine_client.get_fleet.return_value = {"status": "DELETED"}  # type: ignore[attr-defined]
 
         # WHEN
         mock_bealine_manager.delete_fleet()
@@ -365,6 +371,8 @@ class TestBealineManager:
         pytest.param(MOCK_FARM_ID, None, id="NoFleetId"),
         pytest.param(None, MOCK_FLEET_ID, id="NoFarmId"),
     ]
+
+    # Create a test for test_delete_fleet
 
     @pytest.mark.parametrize("fake_farm_id, fake_fleet_id", farm_queue_ids)
     def test_delete_fleet_no_farm_fleet(
@@ -438,17 +446,17 @@ class TestBealineManager:
         ),
         pytest.param(
             "bealine_client",
-            {"farm_id": "fake_farm_id"},
+            {"farm_id": "fake_farm_id", "worker_role_arn": "fake_worker_role_arn"},
             "create_fleet",
             "create_fleet",
-            ["TestFleet"],
+            ["TestFleet", "fake_worker_arn"],
             "fleet_id",
             id="FailedCreateFleet",
         ),
         pytest.param(
             "bealine_client",
             {"farm_id": "fake_farm_id", "fleet_id": "fake_fleet_id"},
-            "delete_fleet",
+            "get_queue_fleet_association",  # This is the first boto call in delete fleet
             "delete_fleet",
             [],
             None,
@@ -538,6 +546,7 @@ class TestBealineManagerAddModels:
         # GIVEN
         temp_path = "/tmp/test"
         mocked_temp_dir.return_value.name = temp_path
+        bealine_endpoint = os.getenv("BEALINE_ENDPOINT")
 
         # WHEN
         manager = BealineManager(should_add_bealine_models=True)
@@ -553,6 +562,8 @@ class TestBealineManagerAddModels:
             "service-2.json",
             f"{temp_path}/bealine/{BealineManager.MOCKED_SERVICE_VERSION}/service-2.json",
         )
-        mocked_boto_session.return_value.client.assert_called_with("bealine", endpoint_url=None)
+        mocked_boto_session.return_value.client.assert_called_with(
+            "bealine", endpoint_url=bealine_endpoint
+        )
         assert manager.bealine_model_dir is not None
         assert manager.bealine_model_dir.name == temp_path

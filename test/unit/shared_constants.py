@@ -6,3 +6,19 @@ MOCK_FLEET_ID = "fleet-0123456789abcdefabcdefabcdefabcd"
 MOCK_FLEET_NAME = "fake_fleet_name"
 MOCK_QUEUE_ID = "queue-0123456789abcdefabcdefabcdefabcd"
 MOCK_QUEUE_NAME = "fake_queue_name"
+MOCK_WORKER_ROLE_ARN = "fake_worker_role_arn"
+MOCK_JOB_ATTACHMENTS_BUCKET_NAME = "fake_job_attachments_bucket_name"
+
+MOCK_DEFAULT_CMF_CONFIG = {
+    "customerManaged": {
+        "autoScalingConfiguration": {
+            "autoScalingMode": "NO_SCALING",
+        },
+        "workerRequirements": {
+            "vCpuCount": {"min": 1},
+            "memoryMiB": {"min": 1024},
+            "osFamily": "linux",
+            "cpuArchitectureType": "x86_64",
+        },
+    }
+}
