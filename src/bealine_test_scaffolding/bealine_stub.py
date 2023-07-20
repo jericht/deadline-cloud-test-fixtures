@@ -44,8 +44,8 @@ class JobInfo:
     jobId: str
     farmId: str
     queueId: str
-    jobTemplate: str
-    jobTemplateType: str
+    template: str
+    templateType: str
     priority: str
     attachments: dict
 

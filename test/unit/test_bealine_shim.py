@@ -132,6 +132,79 @@ class TestBealineShim:
             bealine_client.create_queue(**kwargs_input)
         fake_client.create_queue.assert_called_once_with(**kwargs_output)
 
+    @pytest.mark.parametrize(
+        "kwargs_input, kwargs_output, names_in_model",
+        [
+            pytest.param(
+                {"template": "", "templateType": "", "parameters": ""},
+                {"template": "", "templateType": "", "parameters": ""},
+                ["template", "templateType", "parameters"],
+                id="jobTemplate_NewAPI",
+            ),
+            pytest.param(
+                {"template": "", "templateType": "", "parameters": ""},
+                {
+                    "jobTemplate": "",
+                    "jobTemplateType": "",
+                    "jobParameters": "",
+                },
+                [
+                    "jobTemplate",
+                    "jobTemplateType",
+                    "jobParameters",
+                ],
+                id="jobTemplate_OldAPI",
+            ),
+            pytest.param(
+                {"template": "", "templateType": "", "parameters": "", "initialState": ""},
+                {"jobTemplate": "", "jobTemplateType": "", "jobParameters": "", "initialState": ""},
+                ["jobTemplate", "jobTemplateType", "jobParameters", "initialState"],
+                id="jobTemplate_StateToState",
+            ),
+            pytest.param(
+                {"template": "", "templateType": "", "parameters": "", "targetTaskRunStatus": ""},
+                {
+                    "jobTemplate": "",
+                    "jobTemplateType": "",
+                    "jobParameters": "",
+                    "initialState": "",
+                },
+                ["jobTemplate", "jobTemplateType", "jobParameters", "initialState"],
+                id="jobTemplate_StatusToState",
+            ),
+            pytest.param(
+                {"template": "", "templateType": "", "parameters": "", "targetTaskRunStatus": ""},
+                {
+                    "jobTemplate": "",
+                    "jobTemplateType": "",
+                    "jobParameters": "",
+                    "targetTaskRunStatus": "",
+                },
+                ["jobTemplate", "jobTemplateType", "jobParameters", "targetTaskRunStatus"],
+                id="jobTemplate_StatusToStatus",
+            ),
+        ],
+    )
+    def test_create_job_old_api_compatibility(
+        self, kwargs_input, kwargs_output, names_in_model
+    ) -> None:
+        """
+        create_job will be updated so that template is renamed to
+        jobTemplate. Here we make sure that the shim is doing its job of:
+        1. Calling the underlying client method
+        2. Replacing the appropriate key
+
+        """
+        fake_client = MagicMock()
+        kwargs_output["priority"] = 50
+        model: dict = {k: "" for k in names_in_model}
+        model["priority"] = 50
+        bealine_client = BealineClient(fake_client)
+        with patch.object(bealine_client, "_get_bealine_api_input_shape") as input_shape_mock:
+            input_shape_mock.return_value = kwargs_output
+            bealine_client.create_job(**kwargs_input)
+        fake_client.create_job.assert_called_once_with(**kwargs_output)
+
     def test_get_fleet_name_state_to_displayname_status_remove_type(self) -> None:
         """
         get_fleet will be updated such that "name" will be replaced with "displayName"

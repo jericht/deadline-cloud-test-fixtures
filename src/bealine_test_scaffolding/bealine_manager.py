@@ -486,6 +486,25 @@ class BealineClient:
         # mypy complains about they kwargs type
         return create_queue_fleet_association_method(*args, **kwargs)  # type: ignore
 
+    def create_job(self, *args, **kwargs) -> Any:
+        create_job_input_members = self._get_bealine_api_input_shape("CreateJob")
+        # revert to old parameter names if old service model is used
+        if "maxRetriesPerTask" in kwargs:
+            if "maxErrorsPerTask" in create_job_input_members:
+                kwargs["maxErrorsPerTask"] = kwargs.pop("maxRetriesPerTask")
+        if "template" in kwargs:
+            if "jobTemplate" in create_job_input_members:
+                kwargs["jobTemplate"] = kwargs.pop("template")
+                kwargs["jobTemplateType"] = kwargs.pop("templateType")
+                if "parameters" in kwargs:
+                    kwargs["jobParameters"] = kwargs.pop("parameters")
+        if "targetTaskRunStatus" in kwargs:
+            if "initialState" in create_job_input_members:
+                kwargs["initialState"] = kwargs.pop("targetTaskRunStatus")
+        if "priority" not in kwargs:
+            kwargs["priority"] = 50
+        return self._real_client.create_job(*args, **kwargs)
+
     def update_queue_fleet_association(self, *args, **kwargs) -> Any:
         update_queue_fleet_association_method_name: Optional[str]
         update_queue_fleet_association_method: Optional[str]
