@@ -3,6 +3,7 @@
 import dataclasses
 from dataclasses import dataclass
 from typing import Optional
+from bealine_test_scaffolding.constants import JOB_ATTACHMENTS_ROOT_PREFIX
 
 from botocore.exceptions import ClientError as OriginalClientError
 
@@ -46,7 +47,7 @@ class JobInfo:
     jobTemplate: str
     jobTemplateType: str
     priority: str
-    attachmentSettings: dict
+    attachments: dict
 
 
 @dataclass
@@ -82,11 +83,7 @@ class StubBealineClient:
             "fleets": [],
             "jobAttachmentSettings": {
                 "s3BucketName": self.job_attachments_bucket_name,
-                "assetRoot": "",
-                "inputContentAddressedPrefix": "",
-                "outputPrefix": "",
-                "tempPrefix": "",
-                "manifestPrefix": "",
+                "rootPrefix": JOB_ATTACHMENTS_ROOT_PREFIX,
             },
         }
 

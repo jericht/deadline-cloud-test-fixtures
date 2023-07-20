@@ -17,8 +17,6 @@ from botocore.model import ServiceModel, OperationModel
 
 from .constants import (
     JOB_ATTACHMENTS_ROOT_PREFIX,
-    JOB_ATTACHMENTS_CAS_PREFIX,
-    JOB_ATTACHMENTS_OUTPUT_PREFIX,
     DEFAULT_CMF_CONFIG,
 )
 
@@ -218,8 +216,6 @@ class BealineManager:
             jobAttachmentSettings={
                 "s3BucketName": job_attachments_bucket,
                 "rootPrefix": JOB_ATTACHMENTS_ROOT_PREFIX,
-                "contentAddressedPrefix": JOB_ATTACHMENTS_CAS_PREFIX,
-                "outputPrefix": JOB_ATTACHMENTS_OUTPUT_PREFIX,
             },
         )
 
