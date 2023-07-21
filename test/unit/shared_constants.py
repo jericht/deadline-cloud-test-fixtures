@@ -12,7 +12,7 @@ MOCK_JOB_ATTACHMENTS_BUCKET_NAME = "fake_job_attachments_bucket_name"
 MOCK_DEFAULT_CMF_CONFIG = {
     "customerManaged": {
         "autoScalingConfiguration": {
-            "autoScalingMode": "NO_SCALING",
+            "mode": "NO_SCALING",
         },
         "workerRequirements": {
             "vCpuCount": {"min": 1},

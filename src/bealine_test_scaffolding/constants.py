@@ -23,7 +23,7 @@ JOB_ATTACHMENTS_ROOT_PREFIX = "root"
 DEFAULT_CMF_CONFIG = {
     "customerManaged": {
         "autoScalingConfiguration": {
-            "autoScalingMode": "NO_SCALING",
+            "mode": "NO_SCALING",
         },
         "workerRequirements": {
             "vCpuCount": {"min": 1},
