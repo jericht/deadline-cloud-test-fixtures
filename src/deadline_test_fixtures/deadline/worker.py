@@ -20,6 +20,7 @@ from typing import Any, ClassVar, Optional, cast
 
 from .client import DeadlineClient
 from ..models import (
+    CommandResult,
     PipInstall,
     PosixSessionUser,
     ServiceModel,
@@ -78,40 +79,6 @@ class DeadlineWorker(abc.ABC):
     @abc.abstractproperty
     def worker_id(self) -> str:
         pass
-
-
-@dataclass(frozen=True)
-class CommandResult:  # pragma: no cover
-    exit_code: int
-    stdout: str
-    stderr: Optional[str] = None
-
-    def __str__(self) -> str:
-        return "\n".join(
-            [
-                f"exit_code: {self.exit_code}",
-                "",
-                "================================",
-                "========= BEGIN stdout =========",
-                "================================",
-                "",
-                self.stdout,
-                "",
-                "==============================",
-                "========= END stdout =========",
-                "==============================",
-                "",
-                "================================",
-                "========= BEGIN stderr =========",
-                "================================",
-                "",
-                str(self.stderr),
-                "",
-                "==============================",
-                "========= END stderr =========",
-                "==============================",
-            ]
-        )
 
 
 @dataclass(frozen=True)

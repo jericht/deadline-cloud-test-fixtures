@@ -10,7 +10,7 @@ from abc import ABC, abstractproperty
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 
 
 @dataclass(frozen=True)
@@ -188,3 +188,37 @@ class PipInstall:  # pragma: no cover
         )
 
         return " && ".join(cmds)
+
+
+@dataclass(frozen=True)
+class CommandResult:  # pragma: no cover
+    exit_code: int
+    stdout: str
+    stderr: Optional[str] = None
+
+    def __str__(self) -> str:
+        return "\n".join(
+            [
+                f"exit_code: {self.exit_code}",
+                "",
+                "================================",
+                "========= BEGIN stdout =========",
+                "================================",
+                "",
+                self.stdout,
+                "",
+                "==============================",
+                "========= END stdout =========",
+                "==============================",
+                "",
+                "================================",
+                "========= BEGIN stderr =========",
+                "================================",
+                "",
+                str(self.stderr),
+                "",
+                "==============================",
+                "========= END stderr =========",
+                "==============================",
+            ]
+        )
