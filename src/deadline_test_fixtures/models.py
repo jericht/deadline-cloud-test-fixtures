@@ -6,11 +6,11 @@ import json
 import os
 import re
 import tempfile
-from abc import ABC, abstractproperty
+from abc import ABC, abstractmethod, abstractproperty
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 
 
 @dataclass(frozen=True)
@@ -188,3 +188,51 @@ class PipInstall:  # pragma: no cover
         )
 
         return " && ".join(cmds)
+
+
+class Host(ABC):
+    @abstractmethod
+    def start(self) -> None:
+        pass
+
+    @abstractmethod
+    def stop(self) -> None:
+        pass
+
+    @abstractmethod
+    def send_command(self, command: str) -> CommandResult:
+        pass
+
+
+@dataclass(frozen=True)
+class CommandResult:  # pragma: no cover
+    exit_code: int
+    stdout: str
+    stderr: Optional[str] = None
+
+    def __str__(self) -> str:
+        return "\n".join(
+            [
+                f"exit_code: {self.exit_code}",
+                "",
+                "================================",
+                "========= BEGIN stdout =========",
+                "================================",
+                "",
+                self.stdout,
+                "",
+                "==============================",
+                "========= END stdout =========",
+                "==============================",
+                "",
+                "================================",
+                "========= BEGIN stderr =========",
+                "================================",
+                "",
+                str(self.stderr),
+                "",
+                "==============================",
+                "========= END stderr =========",
+                "==============================",
+            ]
+        )

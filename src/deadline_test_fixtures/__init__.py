@@ -1,12 +1,16 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+from .ec2 import (
+    Instance,
+    InstanceProps,
+)
 from .deadline import (
     CloudWatchLogEvent,
-    CommandResult,
     DeadlineClient,
     DeadlineWorker,
     DeadlineWorkerConfiguration,
     DockerContainerWorker,
     EC2InstanceWorker,
+    EC2InstanceWorkerProps,
     Job,
     Farm,
     Fleet,
@@ -31,6 +35,8 @@ from .fixtures import (
 from .job_attachment_manager import JobAttachmentManager
 from .models import (
     CodeArtifactRepositoryInfo,
+    CommandResult,
+    Host,
     JobAttachmentSettings,
     JobRunAsUser,
     PosixSessionUser,
@@ -50,8 +56,12 @@ __all__ = [
     "DeadlineWorkerConfiguration",
     "DockerContainerWorker",
     "EC2InstanceWorker",
+    "EC2InstanceWorkerProps",
     "Farm",
     "Fleet",
+    "Host",
+    "Instance",
+    "InstanceProps",
     "Job",
     "JobAttachmentSettings",
     "JobAttachmentManager",

@@ -16,6 +16,7 @@ from .worker import (
     DeadlineWorkerConfiguration,
     DockerContainerWorker,
     EC2InstanceWorker,
+    EC2InstanceWorkerProps,
     PipInstall,
 )
 
@@ -27,6 +28,7 @@ __all__ = [
     "DeadlineWorkerConfiguration",
     "DockerContainerWorker",
     "EC2InstanceWorker",
+    "EC2InstanceWorkerProps",
     "Farm",
     "Fleet",
     "Job",
