@@ -168,7 +168,12 @@ def service_model() -> Generator[ServiceModel, None, None]:
         if not local_model_path:
             local_model_path = _find_latest_service_model_file("deadline")
         LOG.info(f"Using service model at: {local_model_path}")
-        yield ServiceModel.from_json_file(local_model_path)
+        if local_model_path.endswith(".json"):
+            yield ServiceModel.from_json_file(local_model_path)
+        elif local_model_path.endswith(".json.gz"):
+            yield ServiceModel.from_json_gz_file(local_model_path)
+        else:
+            raise RuntimeError(f"Unsupported service model file format (must be .json or .json.gz): {local_model_path}")
 
 
 @pytest.fixture(scope="session")
@@ -550,4 +555,8 @@ def _find_latest_service_model_file(service_name: str) -> str:
         service_name, loader.determine_latest_version(service_name, "service-2"), "service-2"
     )
     _, service_model_path = loader.load_data_with_path(full_name)
-    return f"{service_model_path}.json"
+    service_model_files = glob.glob(f"{service_model_path}.*")
+    if len(service_model_files) > 1:
+        raise RuntimeError(f"Expected exactly one file to match glob '{service_model_path}.*, but got: {service_model_files}")
+    return service_model_files[0]
+

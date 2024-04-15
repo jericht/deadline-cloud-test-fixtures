@@ -101,6 +101,16 @@ class ServiceModel:
             service_name=model["metadata"]["serviceId"],
         )
 
+    @staticmethod
+    def from_json_gz_file(path: str) -> ServiceModel:
+        with open(path) as f:
+            model = json.load(f)
+        return ServiceModel(
+            file_path=path,
+            api_version=model["metadata"]["apiVersion"],
+            service_name=model["metadata"]["serviceId"],
+        )
+
     @contextmanager
     def install(self) -> Generator[str, None, None]:
         """
@@ -111,9 +121,9 @@ class ServiceModel:
             old_aws_data_path = os.environ.get("AWS_DATA_PATH")
             src_file = Path(self.file_path)
             with tempfile.TemporaryDirectory() as tmpdir:
-                json_path = Path(tmpdir) / self.service_name / self.api_version / "service-2.json"
+                json_path = Path(tmpdir) / self.service_name / self.api_version / os.path.basename(self.file_path)
                 json_path.parent.mkdir(parents=True)
-                json_path.write_text(src_file.read_text())
+                json_path.write_bytes(src_file.read_bytes())
                 os.environ["AWS_DATA_PATH"] = tmpdir
                 yield str(tmpdir)
         finally:
